@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tapete de Movimento</title>
+    <title>Tapete de Numero</title>
     <style>
         /* Reset and full-screen styles */
         * {
@@ -102,7 +102,7 @@
         - Nuoli Alas: lisää viivettä 500 ms.<br>
         - Nuoli Vasen: kaksinkertaista viive.<br>
         - Nuoli Oikea: puolita viive.<br>
-        - Space: mittaa painallusten välinen aika, aseta uusi viive ja synkronoi värimuutokset.<br>
+        - Space: mittaa painallusten välinen aika, aseta uusi viive ja synkronoi muutokset.<br>
         - +: kasvattaa kuvakkeen kokoa 5% kerrallaan.<br>
         - -: pienentää kuvakkeen kokoa 5% kerrallaan.<br>
         - ESC: pysäytä sovellus ja palauta viive oletusarvoon.
@@ -131,7 +131,7 @@
             const audio = new Audio(`aani-${i + 1}.mp3`);
             return audio;
         });
-        // Programme modes: 1 = yksi väri, 2 = kaksi väriä, 3 = kaksi väriä kuvakkeilla.
+        // Programme modes: 1 = numero ja ääni, 2 = ensin ääni, sitten numero, 3 = numerot kuvakkeina.
         let programmeMode = 1;
         // Cycle delay (ms) after a 500 ms blackout.
         let cycleDelay = 3000;
@@ -205,11 +205,11 @@ function updateNumberSize() {
             const progInd = document.getElementById('progIndicator');
             let text = '';
             if (programmeMode === 1) {
-                text = "Ohjelma 1: Yksi väri";
+                text = "Ohjelma 1: Numero ja ääni";
             } else if (programmeMode === 2) {
-                text = "Ohjelma 2: Kaksi väriä";
+                text = "Ohjelma 2: Ensin ääni, sitten numero";
             } else if (programmeMode === 3) {
-                text = "Ohjelma 3: Kaksi väriä kuvakkeilla";
+                text = "Ohjelma 3: Kuvakkeet ja numero";
             }
             progInd.textContent = text;
             scheduleHideIndicators();
@@ -581,6 +581,7 @@ function switchProgramme() {
                 if (running) {
                     updateCycleDelay(initialCycleDelay);
                     stop();
+                    programmeMode = 1;
                 }
             }
         });
