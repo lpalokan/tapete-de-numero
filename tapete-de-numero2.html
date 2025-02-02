@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="fi">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tapete de Movimento</title>
+    <style>
+        /* Reset and full-screen styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Centered number container */
+        #numberContainer {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10vh;
+            color: white;
+            z-index: 1;
+            transition: font-size 0.3s;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            background: black;
+            overflow: hidden;
+            font-family: sans-serif;
+            color: white;
+        }
+
+        /* Full viewport container */
+        #container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Icon styling for Programme 3 */
+        .icon {
+            position: absolute;
+            /* font-size will be set dynamically */
+            pointer-events: none;
+        }
+
+
+
+        /* Instruction overlay */
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2em;
+            z-index: 2;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Programme indicator (top left) */
+        #progIndicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 1.5em;
+            color: white;
+            z-index: 3;
+        }
+
+        /* Speed indicator (top right) */
+        #speedIndicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 1.5em;
+            color: white;
+            z-index: 3;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Overlay with updated Finnish instructions -->
+    <div id="overlay">
+        Paina Enter aloittaaksesi<br><br>
+        Ohjeet:<br>
+        - Paina Enter vaihtaaksesi ohjelmaa.<br>
+        - Nuoli Ylös: vähennä viivettä 500 ms.<br>
+        - Nuoli Alas: lisää viivettä 500 ms.<br>
+        - Nuoli Vasen: kaksinkertaista viive.<br>
+        - Nuoli Oikea: puolita viive.<br>
+        - Space: mittaa painallusten välinen aika, aseta uusi viive ja synkronoi värimuutokset.<br>
+        - +: kasvattaa kuvakkeen kokoa 5% kerrallaan.<br>
+        - -: pienentää kuvakkeen kokoa 5% kerrallaan.<br>
+        - ESC: pysäytä sovellus ja palauta viive oletusarvoon.
+    </div>
+
+    <!-- Programme indicator -->
+    <div id="progIndicator"></div>
+    <!-- Speed indicator -->
+    <div id="speedIndicator"></div>
+
+    <!-- Main container -->
+    <div id="numberContainer"></div>
+    <div id="container"></div>
+
+    <script>
+        // Global state variables
+        let running = false;
+        let currentTimeout = null;
+        let globalFontSize = 10; // Store font size state across programmes
+        
+        // Array of emojis for Programme 3
+        const emojis = ['😀', '🌟', '🎈', '🎨', '🌈', '🦄', '🐶', '🐱', '🦁', '🐯'];
+        
+        // Audio objects for numbers 1-10
+        const audioFiles = Array.from({length: 10}, (_, i) => {
+            const audio = new Audio(`aani-${i + 1}.mp3`);
+            return audio;
+        });
+        // Programme modes: 1 = yksi väri, 2 = kaksi väriä, 3 = kaksi väriä kuvakkeilla.
+        let programmeMode = 1;
+        // Cycle delay (ms) after a 500 ms blackout.
+        let cycleDelay = 3000;
+        const initialCycleDelay = 3000;  // default cycle delay
+        const minCycleDelay = 500;
+
+        // For Space delay measurement:
+        let lastSpaceTime = null;
+
+// Global icon scale factor (1.0 means 100% of the base size)
+        let iconScale = 0.5; // Start with half size for Programme 3
+        // Global number scale factor
+        let numberScale = 1.0;
+        // Flag to track if Programme 3 has been initialized
+        let prog3Initialized = false;
+
+        // Global indicator timeout
+        let indicatorTimeout = null;
+
+
+
+        // Default icon scale for Programme 3 is 2.0 (double size)
+
+// Calculate base icon size as 30% of the shorter viewport dimension
+        function calculateBaseIconSize() {
+            return 0.3 * Math.min(window.innerWidth, window.innerHeight);
+        }
+
+// Update all currently visible icons with the computed size.
+        function updateIconsSize() {
+            const newSize = calculateBaseIconSize() * iconScale;
+            document.querySelectorAll('.icon').forEach(icon => {
+                icon.style.fontSize = newSize + "px";
+            });
+        }
+
+        // Update the number size
+function updateNumberSize() {
+            const numberContainer = document.getElementById('numberContainer');
+            if (numberContainer) {
+                globalFontSize = 10 * numberScale;
+                numberContainer.style.fontSize = `${globalFontSize}vh`;
+            }
+        }
+
+        // Utility functions
+        function getRandomInt(max) {
+            return Math.floor(Math.random() * max);
+        }
+
+        function getRandomElement(arr) {
+            return arr[getRandomInt(arr.length)];
+        }
+
+        // Clears any icons from the container
+        function clearIcons() {
+            const container = document.getElementById('container');
+            const icons = container.querySelectorAll('.icon');
+            icons.forEach(icon => icon.remove());
+        }
+
+        // Clears the container and removes icons
+        function blackoutSegments() {
+            const container = document.getElementById('container');
+            container.style.backgroundColor = 'black';
+            clearIcons();
+        }
+
+        // Updates the programme indicator text.
+        function updateProgIndicator() {
+            const progInd = document.getElementById('progIndicator');
+            let text = '';
+            if (programmeMode === 1) {
+                text = "Ohjelma 1: Yksi väri";
+            } else if (programmeMode === 2) {
+                text = "Ohjelma 2: Kaksi väriä";
+            } else if (programmeMode === 3) {
+                text = "Ohjelma 3: Kaksi väriä kuvakkeilla";
+            }
+            progInd.textContent = text;
+            scheduleHideIndicators();
+        }
+
+        // Updates the speed indicator.
+        function updateSpeedIndicator() {
+            const speedInd = document.getElementById('speedIndicator');
+            speedInd.textContent = `Viive: ${cycleDelay} ms`;
+            scheduleHideIndicators();
+        }
+
+        // Schedules the programme and speed indicators to disappear after 1.5 seconds.
+        function scheduleHideIndicators() {
+            if (indicatorTimeout) {
+                clearTimeout(indicatorTimeout);
+            }
+            indicatorTimeout = setTimeout(() => {
+                document.getElementById('progIndicator').textContent = "";
+                document.getElementById('speedIndicator').textContent = "";
+            }, 1500);
+        }
+
+        /* --- Cycle functions with blackout --- */
+function cycleProgramme1() {
+            if (!running || programmeMode !== 1) return;
+            // Hide the number during blackout
+            const numberContainer = document.getElementById('numberContainer');
+            numberContainer.style.display = 'none';
+            blackoutSegments();
+            currentTimeout = setTimeout(() => {
+                if (!running || programmeMode !== 1) return;
+                // Keep all segments black
+                blackoutSegments();
+                // Generate random number 1-10
+                const randomNumber = getRandomInt(10) + 1;
+                // Update and show the centered number
+                numberContainer.textContent = randomNumber;
+                numberContainer.style.display = 'block';
+                updateNumberSize();
+                // Play the corresponding audio file (subtract 1 since audio array is 0-based)
+                audioFiles[randomNumber - 1].play();
+                // Schedule the next cycle
+                currentTimeout = setTimeout(cycleProgramme1, cycleDelay);
+            }, 500);
+        }
+
+function cycleProgramme2() {
+            if (!running || programmeMode !== 2) return;
+            const numberContainer = document.getElementById('numberContainer');
+            numberContainer.style.display = 'none';
+            blackoutSegments();
+            
+            // Generate random number first
+            const randomNumber = getRandomInt(10) + 1;
+            
+            // Play sound first
+            audioFiles[randomNumber - 1].play();
+            
+            // Wait for interval
+            currentTimeout = setTimeout(() => {
+                if (!running || programmeMode !== 2) return;
+                
+                // Show the number and update its size
+                numberContainer.textContent = randomNumber;
+                numberContainer.style.display = 'block';
+                updateNumberSize();
+                
+                // Wait for interval again before clearing
+                currentTimeout = setTimeout(() => {
+                    if (!running || programmeMode !== 2) return;
+                    numberContainer.style.display = 'none';
+                    blackoutSegments();
+                    
+                    // Start next cycle
+                    currentTimeout = setTimeout(cycleProgramme2, 500);
+                }, cycleDelay);
+            }, cycleDelay);
+        }
+
+function cycleProgramme3() {
+            if (!running || programmeMode !== 3) return;
+            blackoutSegments();
+            // Remove any existing emoji containers
+            const existingContainers = document.querySelectorAll('.emoji-container');
+            existingContainers.forEach(container => container.remove());
+            
+            const numberContainer = document.getElementById('numberContainer');
+            numberContainer.style.display = 'none';
+            
+            // Ensure icons are sized correctly
+            updateIconsSize();
+            
+            currentTimeout = setTimeout(() => {
+                if (!running || programmeMode !== 3) return;
+                
+                // Generate random number and select random emoji
+                const randomNumber = getRandomInt(10) + 1;
+                const selectedEmoji = emojis[getRandomInt(emojis.length)];
+                
+                // Keep number hidden
+                numberContainer.style.display = 'none';
+                
+                // Create container for emojis
+                const container = document.createElement('div');
+                container.classList.add('emoji-container');
+                container.style.position = 'fixed';
+                container.style.top = '50%';
+                container.style.left = '50%';
+                container.style.transform = 'translate(-50%, -50%)';
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+                container.style.alignItems = 'center';
+                container.style.justifyContent = 'center';
+                container.style.width = '100%';
+                container.style.gap = '20px';
+                
+                // Create rows for emojis
+                const row1 = document.createElement('div');
+                const row2 = document.createElement('div');
+                row1.style.display = 'flex';
+                row2.style.display = 'flex';
+                row1.style.gap = '20px';
+                row2.style.gap = '20px';
+                row1.style.justifyContent = 'center';
+                row2.style.justifyContent = 'center';
+                
+                // Calculate emoji size based on viewport height and icon scale
+                const baseSize = calculateBaseIconSize();
+                const emojiSize = baseSize * iconScale;
+                
+                // Add emojis to rows (max 5 per row)
+                for (let i = 0; i < randomNumber; i++) {
+                    const emoji = document.createElement('span');
+                    emoji.textContent = selectedEmoji;
+                    emoji.style.fontSize = `${emojiSize}px`;
+                    
+                    if (i < 5) {
+                        row1.appendChild(emoji);
+                    } else if (i < 10) {
+                        row2.appendChild(emoji);
+                    }
+                }
+                
+                container.appendChild(row1);
+                if (randomNumber > 5) {
+                    container.appendChild(row2);
+                }
+                document.body.appendChild(container);
+                
+                // Play sound
+                audioFiles[randomNumber - 1].play();
+                
+                // Schedule next cycle
+                currentTimeout = setTimeout(() => {
+                    document.body.removeChild(container);
+                    cycleProgramme3();
+                }, cycleDelay);
+            }, 500);
+        }
+
+        // This function immediately triggers a new cycle (no blackout delay) and updates icons accordingly.
+        function triggerCycle() {
+            blackoutSegments();
+            const newSize = calculateBaseIconSize() * iconScale;
+            if (!running) return;
+            if (programmeMode === 1) {
+                // const seg = getRandomElement(segments);
+                // document.getElementById(seg.id).style.backgroundColor = seg.color;
+                // Update the centered number for Programme 1
+                const randomNumber = getRandomInt(10) + 1;
+                const numberContainer = document.getElementById('numberContainer');
+                numberContainer.textContent = randomNumber;
+                numberContainer.style.display = 'block';
+                updateNumberSize();
+            } else if (programmeMode === 2) {
+                let firstIndex = getRandomInt(segments.length);
+                let secondIndex;
+                do {
+                    secondIndex = getRandomInt(segments.length);
+                } while (secondIndex === firstIndex);
+                const seg1 = segments[firstIndex];
+                const seg2 = segments[secondIndex];
+            } else if (programmeMode === 3) {
+                let firstIndex = getRandomInt(segments.length);
+                let secondIndex;
+                do {
+                    secondIndex = getRandomInt(segments.length);
+                } while (secondIndex === firstIndex);
+                const seg1 = segments[firstIndex];
+                const seg2 = segments[secondIndex];
+                const segElem1 = document.getElementById(seg1.id);
+                const segElem2 = document.getElementById(seg2.id);
+
+                const icon1 = document.createElement('span');
+                const icon2 = document.createElement('span');
+                icon1.classList.add('icon');
+                icon2.classList.add('icon');
+                icon1.style.fontSize = newSize + "px";
+                icon2.style.fontSize = newSize + "px";
+                // Select random emojis for both icons
+                icon1.textContent = emojis[getRandomInt(emojis.length)];
+                icon2.textContent = emojis[getRandomInt(emojis.length)];
+                segElem1.appendChild(icon1);
+                segElem2.appendChild(icon2);
+            }
+            currentTimeout = setTimeout(cycleColors, cycleDelay);
+        }
+
+        // The normal cycle (which includes a blackout) is started here.
+        function cycleColors() {
+            if (!running) return;
+            updateProgIndicator();
+            updateSpeedIndicator();
+            if (programmeMode === 1) {
+                cycleProgramme1();
+            } else if (programmeMode === 2) {
+                cycleProgramme2();
+            } else if (programmeMode === 3) {
+                cycleProgramme3();
+            }
+        }
+
+        /* --- Control functions --- */
+        function start() {
+            if (!running) {
+                running = true;
+                document.getElementById('overlay').style.display = 'none';
+                blackoutSegments();
+                cycleColors();
+            }
+        }
+
+function stop() {
+            running = false;
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
+                currentTimeout = null;
+            }
+            blackoutSegments();
+            const numberContainer = document.getElementById('numberContainer');
+            numberContainer.style.display = 'none';
+            document.getElementById('overlay').style.display = 'flex';
+        }
+
+function switchProgramme() {
+            if (!running) return;
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
+                currentTimeout = null;
+            }
+            clearIcons();
+            // Remove any existing emoji containers when switching programmes
+            const existingContainers = document.querySelectorAll('.emoji-container');
+            existingContainers.forEach(container => container.remove());
+            const numberContainer = document.getElementById('numberContainer');
+            numberContainer.style.display = 'none';
+            // Cycle modes: 1 -> 2 -> 3 -> 1
+            programmeMode = (programmeMode % 3) + 1;
+            // Reset emoji size only when entering Programme 3 for the first time
+            if (programmeMode === 3 && !prog3Initialized) {
+                iconScale = 0.5;
+                prog3Initialized = true;
+            }
+            updateProgIndicator();
+            cycleColors();
+        }
+
+        // When updating the cycle delay, clear the existing timeout and (if sync is true) trigger a cycle immediately.
+        function updateCycleDelay(newDelay, sync = false) {
+            cycleDelay = Math.max(minCycleDelay, newDelay);
+            updateSpeedIndicator();
+            if (running) {
+                if (currentTimeout) {
+                    clearTimeout(currentTimeout);
+                    currentTimeout = null;
+                }
+                if (sync) {
+                    triggerCycle();
+                } else {
+                    cycleColors();
+                }
+            }
+        }
+
+        // Adjust delay by a fixed step.
+        function adjustCycleDelay(change) {
+            updateCycleDelay(cycleDelay + change);
+        }
+
+        // Multiply the delay.
+        function multiplyCycleDelay(factor) {
+            updateCycleDelay(cycleDelay * factor);
+        }
+
+        /* --- Event Listener --- */
+        document.addEventListener('keydown', (e) => {
+            if (e.code === "Enter") {
+                if (!running) {
+                    start();
+                } else {
+                    switchProgramme();
+                }
+            }
+            else if (e.code === "ArrowUp") {
+                if (running) {
+                    adjustCycleDelay(-500);
+                }
+            }
+            else if (e.code === "ArrowDown") {
+                if (running) {
+                    adjustCycleDelay(500);
+                }
+            }
+            // ArrowLeft: doubles the delay.
+            else if (e.code === "ArrowLeft") {
+                if (running) {
+                    multiplyCycleDelay(2);
+                }
+            }
+            // ArrowRight: halves the delay.
+            else if (e.code === "ArrowRight") {
+                if (running) {
+                    multiplyCycleDelay(0.5);
+                }
+            }
+// Plus key: Increase scale by 5%
+            else if (e.key === "+" || e.code === "NumpadAdd") {
+                if (programmeMode === 3) {
+                    iconScale += 0.05;
+                    // Update size of both visible emoji containers and icons
+                    updateIconsSize();
+                    const emojiContainers = document.querySelectorAll('.emoji-container span');
+                    const baseSize = calculateBaseIconSize();
+                    emojiContainers.forEach(emoji => {
+                        emoji.style.fontSize = `${baseSize * iconScale}px`;
+                    });
+                } else if (programmeMode === 1 || programmeMode === 2) {
+                    numberScale += 0.5;
+                    updateNumberSize();
+                }
+            }
+            // Minus key: Decrease scale by 5%
+            else if (e.key === "-" || e.code === "NumpadSubtract") {
+                if (programmeMode === 3) {
+                    iconScale = Math.max(0.1, iconScale - 0.05);
+                    // Update size of both visible emoji containers and icons
+                    updateIconsSize();
+                    const emojiContainers = document.querySelectorAll('.emoji-container span');
+                    const baseSize = calculateBaseIconSize();
+                    emojiContainers.forEach(emoji => {
+                        emoji.style.fontSize = `${baseSize * iconScale}px`;
+                    });
+                } else if (programmeMode === 1 || programmeMode === 2) {
+                    numberScale = Math.max(0.1, numberScale - 0.5);
+                    updateNumberSize();
+                }
+            }
+            // Space: measure the interval, update the delay, and sync the cycle.
+            else if (e.code === "Space") {
+                const now = Date.now();
+                if (lastSpaceTime !== null) {
+                    const interval = now - lastSpaceTime;
+                    updateCycleDelay(interval, true); // sync = true ensures triggerCycle() runs immediately.
+                }
+                lastSpaceTime = now;
+            }
+            else if (e.code === "Escape") {
+                if (running) {
+                    updateCycleDelay(initialCycleDelay);
+                    stop();
+                }
+            }
+        });
+
+        // Attempt fullscreen (optional).
+        document.documentElement.requestFullscreen?.().catch(() => {
+            // If fullscreen is blocked, that's okay.
+        });
+    </script>
+</body>
+
+</html>
