@@ -89,6 +89,16 @@
             color: white;
             z-index: 3;
         }
+
+        /* Max number indicator (bottom left) */
+        #maxNumberIndicator {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 1.5em;
+            color: white;
+            z-index: 3;
+        }
     </style>
 </head>
 
@@ -98,6 +108,7 @@
         Paina Enter aloittaaksesi<br><br>
         Ohjeet:<br>
         - Paina Enter vaihtaaksesi ohjelmaa.<br>
+        - Numeronäppäimet 1-9, 0: aseta suurin numero (0 = 10).<br>
         - Nuoli Ylös: vähennä viivettä 500 ms.<br>
         - Nuoli Alas: lisää viivettä 500 ms.<br>
         - Nuoli Vasen: kaksinkertaista viive.<br>
@@ -112,6 +123,8 @@
     <div id="progIndicator"></div>
     <!-- Speed indicator -->
     <div id="speedIndicator"></div>
+    <!-- Max number indicator -->
+    <div id="maxNumberIndicator"></div>
 
     <!-- Main container -->
     <div id="numberContainer"></div>
@@ -137,6 +150,8 @@
         let cycleDelay = 3000;
         const initialCycleDelay = 3000;  // default cycle delay
         const minCycleDelay = 500;
+        // Maximum number to use (1-10), controlled by number keys
+        let maxNumber = 10;
 
         // For Space delay measurement:
         let lastSpaceTime = null;
@@ -222,6 +237,13 @@ function updateNumberSize() {
             scheduleHideIndicators();
         }
 
+        // Updates the max number indicator.
+        function updateMaxNumberIndicator() {
+            const maxNumInd = document.getElementById('maxNumberIndicator');
+            maxNumInd.textContent = `Suurin numero: ${maxNumber}`;
+            scheduleHideIndicators();
+        }
+
         // Schedules the programme and speed indicators to disappear after 1.5 seconds.
         function scheduleHideIndicators() {
             if (indicatorTimeout) {
@@ -230,6 +252,7 @@ function updateNumberSize() {
             indicatorTimeout = setTimeout(() => {
                 document.getElementById('progIndicator').textContent = "";
                 document.getElementById('speedIndicator').textContent = "";
+                document.getElementById('maxNumberIndicator').textContent = "";
             }, 1500);
         }
 
@@ -244,8 +267,8 @@ function cycleProgramme1() {
                 if (!running || programmeMode !== 1) return;
                 // Keep all segments black
                 blackoutSegments();
-                // Generate random number 1-10
-                const randomNumber = getRandomInt(10) + 1;
+                // Generate random number based on maxNumber setting
+                const randomNumber = getRandomInt(maxNumber) + 1;
                 // Update and show the centered number
                 numberContainer.textContent = randomNumber;
                 numberContainer.style.display = 'block';
@@ -262,9 +285,9 @@ function cycleProgramme2() {
             const numberContainer = document.getElementById('numberContainer');
             numberContainer.style.display = 'none';
             blackoutSegments();
-            
-            // Generate random number first
-            const randomNumber = getRandomInt(10) + 1;
+
+            // Generate random number based on maxNumber setting
+            const randomNumber = getRandomInt(maxNumber) + 1;
             
             // Play sound first
             audioFiles[randomNumber - 1].play();
@@ -305,9 +328,9 @@ function cycleProgramme3() {
             
             currentTimeout = setTimeout(() => {
                 if (!running || programmeMode !== 3) return;
-                
-                // Generate random number and select random emoji
-                const randomNumber = getRandomInt(10) + 1;
+
+                // Generate random number based on maxNumber setting and select random emoji
+                const randomNumber = getRandomInt(maxNumber) + 1;
                 const selectedEmoji = emojis[getRandomInt(emojis.length)];
                 
                 // Keep number hidden
@@ -380,7 +403,7 @@ function cycleProgramme3() {
                 // const seg = getRandomElement(segments);
                 // document.getElementById(seg.id).style.backgroundColor = seg.color;
                 // Update the centered number for Programme 1
-                const randomNumber = getRandomInt(10) + 1;
+                const randomNumber = getRandomInt(maxNumber) + 1;
                 const numberContainer = document.getElementById('numberContainer');
                 numberContainer.textContent = randomNumber;
                 numberContainer.style.display = 'block';
@@ -576,6 +599,15 @@ function switchProgramme() {
                     updateCycleDelay(interval, true); // sync = true ensures triggerCycle() runs immediately.
                 }
                 lastSpaceTime = now;
+            }
+            // Number keys 1-9 and 0: Set maximum number (0 = 10)
+            else if (e.key >= '1' && e.key <= '9') {
+                maxNumber = parseInt(e.key);
+                updateMaxNumberIndicator();
+            }
+            else if (e.key === '0') {
+                maxNumber = 10;
+                updateMaxNumberIndicator();
             }
             else if (e.code === "Escape") {
                 if (running) {
